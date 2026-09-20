@@ -479,7 +479,11 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
         {
             if (rdata[0] == GIP_CMD_INPUT)
             {
+                // Guide arrives separately in GIP_CMD_VIRTUAL_KEY reports.
+                // A regular input report must not release a held Guide button.
+                uint16_t guide = pad->wButtons & XINPUT_GAMEPAD_GUIDE;
                 tu_memclr(pad, sizeof(xinput_gamepad_t));
+                pad->wButtons = guide;
                 uint16_t wButtons = rdata[5] << 8 | rdata[4];
 
                 //Map digital buttons
@@ -497,7 +501,10 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
                 if (wButtons & (1 << 5)) pad->wButtons |= XINPUT_GAMEPAD_B;
                 if (wButtons & (1 << 6)) pad->wButtons |= XINPUT_GAMEPAD_X;
                 if (wButtons & (1 << 7)) pad->wButtons |= XINPUT_GAMEPAD_Y;
-                if (rdata[22] && 0x01) pad->wButtons   |= XINPUT_GAMEPAD_SHARE;
+                // Only bit 0 is Share; HORI Mode 1 also reports other buttons here.
+                // Short reports leave old bytes in the receive buffer.
+                if (xferred_bytes > 22 && (rdata[22] & 0x01))
+                    pad->wButtons |= XINPUT_GAMEPAD_SHARE;
 
                 //Map the left and right triggers
                 pad->bLeftTrigger = (rdata[7] << 8 | rdata[6]) >> 2;
