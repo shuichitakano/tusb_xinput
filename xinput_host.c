@@ -383,11 +383,12 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
     if (dir == TUSB_DIR_IN)
     {
         TU_LOG2("Get Report callback (%u, %u, %u bytes)\r\n", dev_addr, instance, xferred_bytes);
+        // Ignore incomplete fields: the rest of epin_buf may contain an older report.
         if (xid_itf->type == XBOX360_WIRED)
         {
             #define GET_USHORT(a) (uint16_t)((a)[1] << 8 | (a)[0])
             #define GET_SHORT(a) ((int16_t)GET_USHORT(a))
-            if (rdata[1] == 0x14)
+            if (xferred_bytes >= 14 && rdata[1] == 0x14)
             {
                 tu_memclr(pad, sizeof(xinput_gamepad_t));
                 uint16_t wButtons = rdata[3] << 8 | rdata[2];
@@ -425,7 +426,7 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
         else if (xid_itf->type == XBOX360_WIRELESS)
         {
             //Connect/Disconnect packet
-            if (rdata[0] & 0x08)
+            if (xferred_bytes >= 2 && (rdata[0] & 0x08))
             {
                 if (rdata[1] != 0x00 && xid_itf->connected == false)
                 {
@@ -440,7 +441,7 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
             }
 
             //Button status packet
-            if ((rdata[1] & 1) && rdata[5] == 0x13)
+            if (xferred_bytes >= 18 && (rdata[1] & 1) && rdata[5] == 0x13)
             {
                 tu_memclr(pad, sizeof(xinput_gamepad_t));
                 uint16_t wButtons = rdata[7] << 8 | rdata[6];
@@ -477,7 +478,7 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
         }
         else if (xid_itf->type == XBOXONE)
         {
-            if (rdata[0] == GIP_CMD_INPUT)
+            if (xferred_bytes >= 18 && rdata[0] == GIP_CMD_INPUT)
             {
                 // Guide arrives separately in GIP_CMD_VIRTUAL_KEY reports.
                 // A regular input report must not release a held Guide button.
@@ -518,7 +519,7 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
 
                 xid_itf->new_pad_data = true;
             }
-            else if (rdata[0] == GIP_CMD_VIRTUAL_KEY)
+            else if (xferred_bytes >= 5 && rdata[0] == GIP_CMD_VIRTUAL_KEY)
             {
                 if (rdata[4] == 0x01 && !(pad->wButtons & XINPUT_GAMEPAD_GUIDE)) {
                     xid_itf->new_pad_data = true;
@@ -529,14 +530,14 @@ bool xinputh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, ui
                     pad->wButtons &= ~XINPUT_GAMEPAD_GUIDE;
                 }
             }
-            else if (rdata[0] == GIP_CMD_ANNOUNCE)
+            else if (xferred_bytes >= 4 && rdata[0] == GIP_CMD_ANNOUNCE)
             {
                 xboxone_init(xid_itf, dev_addr, instance);
             }
         }
         else if (xid_itf->type == XBOXOG)
         {
-            if (rdata[1] == 0x14)
+            if (xferred_bytes >= 20 && rdata[1] == 0x14)
             {
                 tu_memclr(pad, sizeof(xinput_gamepad_t));
                 uint16_t wButtons = rdata[3] << 8 | rdata[2];
